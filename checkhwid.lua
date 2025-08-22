@@ -1,4 +1,4 @@
--- Whiteout Overlay – LocalScript + Auto Respawn + Timer + Toggle Button + FPS Stats + Ping + RAM/CPU Stats
+-- Whiteout Overlay + Mini HUD (FPS, Ping, RAM, Instances)
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
@@ -14,15 +14,15 @@ gui.IgnoreGuiInset = true
 gui.DisplayOrder = 999999
 gui.Parent = lp:WaitForChild("PlayerGui")
 
+-- Main Frame
 local frame = Instance.new("Frame")
 frame.Size = UDim2.fromScale(1, 1)
-frame.Position = UDim2.fromScale(0, 0)
 frame.BackgroundColor3 = Color3.new(1, 1, 1)
 frame.BorderSizePixel = 0
 frame.BackgroundTransparency = 0
 frame.Parent = gui
 
--- Lấy tên game
+-- Game name
 local gameName = "Unknown"
 do
 	local ok, info = pcall(function()
@@ -33,7 +33,7 @@ do
 	end
 end
 
--- Label hiển thị
+-- Info Label (Main)
 local infoLabel = Instance.new("TextLabel")
 infoLabel.Size = UDim2.new(1, 0, 0, 320)
 infoLabel.Position = UDim2.new(0.5, 0, 0.5, 0)
@@ -45,20 +45,46 @@ infoLabel.Font = Enum.Font.SourceSansBold
 infoLabel.TextSize = 30
 infoLabel.TextXAlignment = Enum.TextXAlignment.Center
 infoLabel.TextYAlignment = Enum.TextYAlignment.Center
-infoLabel.LineHeight = 1.1
 infoLabel.Parent = gui
 
--- Biến
+-- Mini HUD
+local miniHUD = Instance.new("TextLabel")
+miniHUD.Size = UDim2.new(0, 250, 0, 90)
+miniHUD.Position = UDim2.new(0, 10, 0, 10)
+miniHUD.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+miniHUD.BackgroundTransparency = 0.3
+miniHUD.TextColor3 = Color3.new(1, 1, 1)
+miniHUD.Font = Enum.Font.SourceSansBold
+miniHUD.TextSize = 20
+miniHUD.TextXAlignment = Enum.TextXAlignment.Left
+miniHUD.TextYAlignment = Enum.TextYAlignment.Top
+miniHUD.TextStrokeTransparency = 0.3
+miniHUD.Text = "Mini HUD\nFPS: 0\nPing: 0\nRAM: 0 MB\nInst: 0"
+miniHUD.Parent = gui
+miniHUD.Visible = true
+
+-- Toggle Button
+local toggleButton = Instance.new("TextButton")
+toggleButton.Size = UDim2.new(0, 200, 0, 50)
+toggleButton.Position = UDim2.new(0.5, 0, 0.9, 0)
+toggleButton.AnchorPoint = Vector2.new(0.5, 0.5)
+toggleButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleButton.Font = Enum.Font.SourceSansBold
+toggleButton.TextSize = 28
+toggleButton.Text = "Whiteout: ON"
+toggleButton.Parent = gui
+
+-- Vars
 local visible = true
+local hudVisible = true
 local transparency = 0
 local mapHidden = false
 local storedParents = {}
 local whiteoutStartTime = os.clock()
-
--- FPS stats
 local fpsMin, fpsMax, fpsSum, fpsCount = math.huge, 0, 0, 0
 
--- Ẩn/hiện map
+-- Hide/Show map
 local function hideMap()
 	if mapHidden then return end
 	mapHidden = true
@@ -79,7 +105,7 @@ local function showMap()
 	storedParents = {}
 end
 
--- Áp dụng trạng thái
+-- Apply
 local function apply()
 	frame.Visible = visible
 	frame.BackgroundTransparency = transparency
@@ -91,26 +117,16 @@ local function apply()
 		showMap()
 	end
 end
+apply()
 
--- Nút toggle
-local toggleButton = Instance.new("TextButton")
-toggleButton.Size = UDim2.new(0, 200, 0, 50)
-toggleButton.Position = UDim2.new(0.5, 0, 0.9, 0)
-toggleButton.AnchorPoint = Vector2.new(0.5, 0.5)
-toggleButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-toggleButton.Font = Enum.Font.SourceSansBold
-toggleButton.TextSize = 28
-toggleButton.Text = "Whiteout: ON"
-toggleButton.Parent = gui
-toggleButton.ZIndex = 1000000
+-- Toggle Button click
 toggleButton.MouseButton1Click:Connect(function()
 	visible = not visible
 	apply()
 	toggleButton.Text = visible and "Whiteout: ON" or "Whiteout: OFF"
 end)
 
--- Cập nhật FPS + Ping + Stats
+-- Update Stats
 local lastUpdate = os.clock()
 local frames = 0
 RunService.Heartbeat:Connect(function()
@@ -118,24 +134,16 @@ RunService.Heartbeat:Connect(function()
 	local now = os.clock()
 	if now - lastUpdate >= 1 then
 		local fps = frames / (now - lastUpdate)
-		frames = 0
-		lastUpdate = now
+		frames, lastUpdate = 0, now
 
-		-- FPS stats
 		fpsCount += 1
 		fpsSum += fps
 		if fps < fpsMin then fpsMin = fps end
 		if fps > fpsMax then fpsMax = fps end
 		local fpsAvg = fpsSum / fpsCount
 
-		-- Ping
-		local ping = 0
-		local pingStat = Stats.Network.ServerStatsItem["Data Ping"]
-		if pingStat then
-			ping = math.floor(pingStat:GetValue())
-		end
-
-		-- RAM + Instance Count
+		-- Ping + RAM + Instances
+		local ping = Stats.Network.ServerStatsItem["Data Ping"] and math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue()) or 0
 		local ram = math.floor(Stats:GetTotalMemoryUsageMb())
 		local instances = Stats.InstanceCount
 
@@ -143,25 +151,27 @@ RunService.Heartbeat:Connect(function()
 		local elapsed = math.floor(now - whiteoutStartTime)
 		local timerText = visible and string.format("Whiteout On: %ds", elapsed) or "Whiteout Off"
 
-		-- Update text
+		-- Main overlay
 		infoLabel.Text = string.format(
 			"Game: %s\nPlayer: %s (@%s)\nFPS: %d | AVG: %d | MIN: %d | MAX: %d\nPing: %d ms\nRAM: %d MB | Instances: %d\n%s",
 			gameName,
-			lp.DisplayName,
-			lp.Name,
-			math.floor(fps + 0.5),
-			math.floor(fpsAvg + 0.5),
-			math.floor(fpsMin + 0.5),
-			math.floor(fpsMax + 0.5),
-			ping,
-			ram,
-			instances,
-			timerText
+			lp.DisplayName, lp.Name,
+			math.floor(fps + 0.5), math.floor(fpsAvg + 0.5),
+			math.floor(fpsMin + 0.5), math.floor(fpsMax + 0.5),
+			ping, ram, instances, timerText
 		)
+
+		-- Mini HUD
+		if hudVisible then
+			miniHUD.Text = string.format(
+				"Mini HUD\nFPS: %d\nPing: %d ms\nRAM: %d MB\nInst: %d",
+				math.floor(fps + 0.5), ping, ram, instances
+			)
+		end
 	end
 end)
 
--- Auto bật lại khi respawn
+-- Respawn
 lp.CharacterAdded:Connect(function()
 	task.wait(1)
 	visible = true
@@ -169,13 +179,16 @@ lp.CharacterAdded:Connect(function()
 	toggleButton.Text = "Whiteout: ON"
 end)
 
--- Phím tắt
+-- Hotkeys
 UIS.InputBegan:Connect(function(input, gp)
 	if gp then return end
 	if input.KeyCode == Enum.KeyCode.RightShift then
 		visible = not visible
 		apply()
 		toggleButton.Text = visible and "Whiteout: ON" or "Whiteout: OFF"
+	elseif input.KeyCode == Enum.KeyCode.M then -- Toggle Mini HUD
+		hudVisible = not hudVisible
+		miniHUD.Visible = hudVisible
 	elseif input.KeyCode == Enum.KeyCode.LeftBracket then
 		transparency = math.clamp(transparency + 0.05, 0, 1)
 		apply()
@@ -184,6 +197,3 @@ UIS.InputBegan:Connect(function(input, gp)
 		apply()
 	end
 end)
-
--- Auto apply khi load
-apply()
