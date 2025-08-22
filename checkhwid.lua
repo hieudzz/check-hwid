@@ -1,134 +1,146 @@
--- LocalScript (client)
+-- LocalScript: XÓA FULL (ẩn toàn bộ map/players khác) + Khôi phục
+-- Mục tiêu: ẩn chỉ ở client (dùng LocalTransparencyModifier), không ảnh hưởng collision.
 
 local Players = game:GetService("Players")
-local RbxAnalytics = game:GetService("RbxAnalyticsService")
-local UIS = game:GetService("UserInputService")
-
-local function getExecutorName()
-    if identifyexecutor then
-        local name, ver = identifyexecutor()
-        if name and ver then return string.format("%s (%s)", name, ver) end
-        if name then return tostring(name) end
-    end
-    if syn then return "syn-like (mobile shim?)" end
-    return "Unknown"
-end
-
-local function tryGetExecutorHWID()
-    local try = {
-        function() return syn and syn.get_hwid and syn.get_hwid() end,
-        function() return gethwid and gethwid() end,
-        function() return get_hwid and get_hwid() end,
-        function() return getdeviceid and getdeviceid() end,
-        function() return deviceid and deviceid() end,
-        function() return get_device_id and get_device_id() end,
-    }
-    for _, f in ipairs(try) do
-        local ok, v = pcall(f)
-        if ok and v and tostring(v) ~= "" then
-            return tostring(v)
-        end
-    end
-    return nil
-end
-
-local function getClientId()
-    local ok, v = pcall(function() return RbxAnalytics:GetClientId() end)
-    return ok and v or "unknown"
-end
-
-local isAndroid = false
-pcall(function() isAndroid = (UIS:GetPlatform() == Enum.Platform.Android) end)
-
-local execName = getExecutorName()
-local execHWID = tryGetExecutorHWID()
-local clientId = getClientId()
-
--- ==== GUI ====
+local Lighting = game:GetService("Lighting")
+local RunService = game:GetService("RunService")
 local lp = Players.LocalPlayer
+
+-- ====== GUI ======
 local gui = Instance.new("ScreenGui")
-gui.Name = "ExecIDPanel"
+gui.Name = "XoaFullGUI"
 gui.ResetOnSpawn = false
 gui.Parent = lp:WaitForChild("PlayerGui")
 
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0.7, 0, 0.42, 0)
-frame.Position = UDim2.new(0.15, 0, 0.29, 0)
+frame.Size = UDim2.new(0.5, 0, 0.22, 0)
+frame.Position = UDim2.new(0.25, 0, 0.1, 0)
 frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 frame.BackgroundTransparency = 0.2
 frame.BorderSizePixel = 0
 frame.Parent = gui
 
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, 0, 0.2, 0)
+title.Size = UDim2.new(1, 0, 0.35, 0)
 title.BackgroundTransparency = 1
-title.Text = "🔐 Executor / Device IDs"
+title.Text = "XÓA FULL MAP (Client)"
 title.TextColor3 = Color3.fromRGB(0, 255, 0)
 title.Font = Enum.Font.SourceSansBold
 title.TextScaled = true
 title.Parent = frame
 
-local info = Instance.new("TextLabel")
-info.Size = UDim2.new(1, -20, 0.6, 0)
-info.Position = UDim2.new(0, 10, 0.2, 0)
-info.BackgroundTransparency = 1
-info.TextXAlignment = Enum.TextXAlignment.Left
-info.TextYAlignment = Enum.TextYAlignment.Top
-info.TextWrapped = true
-info.TextScaled = false
-info.Font = Enum.Font.SourceSans
-info.TextColor3 = Color3.fromRGB(255, 255, 255)
-info.TextSize = 20
-info.Parent = frame
+local btnOn = Instance.new("TextButton")
+btnOn.Size = UDim2.new(0.48, 0, 0.5, 0)
+btnOn.Position = UDim2.new(0.02, 0, 0.45, 0)
+btnOn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+btnOn.TextColor3 = Color3.fromRGB(255, 255, 255)
+btnOn.TextScaled = true
+btnOn.Font = Enum.Font.SourceSansBold
+btnOn.Text = "BẬT (Ẩn sạch)"
+btnOn.Parent = frame
 
-local function buildText()
-    local lines = {
-        ("Platform: %s"):format(isAndroid and "Android" or "Other"),
-        ("Executor: %s"):format(execName),
-        ("Executor HWID: %s"):format(execHWID or "N/A (executor không cung cấp API)"),
-        ("ClientId: %s"):format(clientId),
-    }
-    return table.concat(lines, "\n")
-end
-info.Text = buildText()
+local btnOff = Instance.new("TextButton")
+btnOff.Size = UDim2.new(0.48, 0, 0.5, 0)
+btnOff.Position = UDim2.new(0.5, 0, 0.45, 0)
+btnOff.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
+btnOff.TextColor3 = Color3.fromRGB(255, 255, 255)
+btnOff.TextScaled = true
+btnOff.Font = Enum.Font.SourceSansBold
+btnOff.Text = "TẮT (Khôi phục)"
+btnOff.Parent = frame
 
-local copyBtn = Instance.new("TextButton")
-copyBtn.Size = UDim2.new(0.45, 0, 0.15, 0)
-copyBtn.Position = UDim2.new(0.05, 0, 0.82, 0)
-copyBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-copyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-copyBtn.Font = Enum.Font.SourceSansBold
-copyBtn.TextScaled = true
-copyBtn.Text = "Copy HWID (or ClientId)"
-copyBtn.Parent = frame
+-- ====== CORE ======
+local nuked = false
+local connLoop
 
-local closeBtn = Instance.new("TextButton")
-closeBtn.Size = UDim2.new(0.45, 0, 0.15, 0)
-closeBtn.Position = UDim2.new(0.5, 0, 0.82, 0)
-closeBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-closeBtn.Font = Enum.Font.SourceSansBold
-closeBtn.TextScaled = true
-closeBtn.Text = "Close"
-closeBtn.Parent = frame
-
-local StarterGui = game:GetService("StarterGui")
-local function toast(msg)
-    pcall(function()
-        StarterGui:SetCore("SendNotification", {Title = "Exec ID", Text = msg, Duration = 5})
-    end)
+-- Chỉ ẩn hình, giữ va chạm: dùng LocalTransparencyModifier (cục bộ)
+local function hidePart(p)
+	if p:IsA("BasePart") then
+		-- Đừng ẩn nhân vật của mình
+		local ch = lp.Character
+		if ch and p:IsDescendantOf(ch) then return end
+		p.LocalTransparencyModifier = 1
+	end
 end
 
-copyBtn.MouseButton1Click:Connect(function()
-    local textToCopy = execHWID or clientId
-    if setclipboard then
-        pcall(setclipboard, textToCopy)
-        toast("Đã copy: " .. string.sub(textToCopy, 1, 24) .. "...")
-    else
-        toast("Executor không hỗ trợ setclipboard; hãy tự ghi lại.")
-    end
-end)
+local function showPart(p)
+	if p:IsA("BasePart") then
+		p.LocalTransparencyModifier = 0
+	end
+end
 
-closeBtn.MouseButton1Click:Connect(function()
-    gui:Destroy()
+local function applyLightingDark()
+	-- Làm tối/đen để “xóa” Terrain/sky cục bộ
+	Lighting.FogStart = 0
+	Lighting.FogEnd = 1
+	Lighting.FogColor = Color3.new(0,0,0)
+	Lighting.Brightness = 0
+	Lighting.GlobalShadows = false
+end
+
+local function restoreLighting()
+	-- Khôi phục cơ bản (đủ nhìn lại). Tuỳ game có thể khác.
+	Lighting.FogStart = 100000
+	Lighting.FogEnd = 100000
+	Lighting.FogColor = Color3.fromRGB(255,255,255)
+	Lighting.Brightness = 2
+	Lighting.GlobalShadows = true
+end
+
+local function nukeOnce()
+	for _, d in ipairs(workspace:GetDescendants()) do
+		hidePart(d)
+	end
+	-- Ẩn người chơi khác
+	for _, pl in ipairs(Players:GetPlayers()) do
+		if pl ~= lp and pl.Character then
+			for _, d in ipairs(pl.Character:GetDescendants()) do
+				hidePart(d)
+			end
+		end
+	end
+end
+
+local function restoreOnce()
+	for _, d in ipairs(workspace:GetDescendants()) do
+		showPart(d)
+	end
+	for _, pl in ipairs(Players:GetPlayers()) do
+		if pl.Character then
+			for _, d in ipairs(pl.Character:GetDescendants()) do
+				showPart(d)
+			end
+		end
+	end
+end
+
+local function startNuke()
+	if nuked then return end
+	nuked = true
+	applyLightingDark()
+	nukeOnce()
+	-- Liên tục ẩn các part mới spawn để “xóa full” bền
+	connLoop = RunService.Heartbeat:Connect(function()
+		nukeOnce()
+	end)
+end
+
+local function stopNuke()
+	if not nuked then return end
+	nuked = false
+	if connLoop then connLoop:Disconnect() connLoop = nil end
+	restoreLighting()
+	restoreOnce()
+end
+
+btnOn.MouseButton1Click:Connect(startNuke)
+btnOff.MouseButton1Click:Connect(stopNuke)
+
+-- Hotkey: nhấn F8 để bật/tắt nhanh
+local UIS = game:GetService("UserInputService")
+UIS.InputBegan:Connect(function(i, gp)
+	if gp then return end
+	if i.KeyCode == Enum.KeyCode.F8 then
+		if nuked then stopNuke() else startNuke() end
+	end
 end)
